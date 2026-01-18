@@ -35,8 +35,12 @@ For the proper display of icons in the TUI, a Nerd Font is required. Please ensu
 
 1.  **Run the application:**
     ```bash
-    python run.py
+    python run.py [--debug]
     ```
+    *   To enable debug mode, run with the `--debug` flag: `python run.py --debug`.
+        In debug mode, detailed debug logs will be written to `app_error.log`, and all
+        subscribed radio messages will be logged in JSON format to a file named
+        `radio_messages.json` in the project root directory.
 
 2.  **Connect to your radio:**
      * enter the name, serial port (normally /dev/ttyUSB0) and the correct baud rate for your device.
