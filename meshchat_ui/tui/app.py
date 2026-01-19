@@ -8,6 +8,8 @@ from meshchat_ui.radio.connector import RadioConnector
 from meshchat_ui.logger import get_logger
 from meshchat_ui.tui.sidebar import Sidebar
 from meshchat_ui.tui.connection_screen import ConnectionScreen
+from meshchat_ui.tui.channel_overwrite_screen import ChannelOverwriteScreen # New import
+import re # New import
 
 
 class Message(Static):
@@ -123,6 +125,9 @@ class MeshChatApp(App):
         contact_list = self.query_one("#contacts", ListView)
         contact_list.clear()
         for contact in contacts:
+            if not isinstance(contact, dict):
+                self.logger.debug(f"Skipping invalid contact entry: {contact}")
+                continue
             contact_type = contact.get("type")
             contact_name = contact.get("name", "Unknown")
             if contact_type == 1:  # Client
@@ -134,6 +139,38 @@ class MeshChatApp(App):
             else:
                 display_name = contact_name
             contact_list.append(ListItem(Static(display_name)))
+
+    async def process_join_command(self, channel_name: str) -> None:
+        self.notify(f"Attempting to join public channel {channel_name}...")
+        # join_public_channel returns (success, message, extra_data)
+        join_success, result, extra_data = await self.radio_connector.join_public_channel(channel_name)
+        
+        if join_success:
+            self.notify(f"Successfully joined channel {channel_name}.")
+            # Refresh channels list after joining a new one
+            self.get_lists_worker = self.run_worker(
+                self.radio_connector.get_contacts_and_channels, name="get_lists"
+            )
+        elif result == "OVERWRITE_REQUIRED":
+            # Use the extra_data (used_channels) returned from join_public_channel
+            overwrite_choice = await self.push_screen_wait(ChannelOverwriteScreen(extra_data))
+            
+            if overwrite_choice is not None:
+                self.notify(f"Overwriting channel {overwrite_choice} with {channel_name}...")
+                overwrite_success, overwrite_message = await self.radio_connector.overwrite_public_channel(channel_name, overwrite_choice)
+                if overwrite_success:
+                    self.notify(f"Successfully joined channel {channel_name}.")
+                    self.get_lists_worker = self.run_worker(
+                        self.radio_connector.get_contacts_and_channels, name="get_lists"
+                    )
+                else:
+                    self.notify(f"Failed to overwrite channel: {overwrite_message}")
+                    self.logger.error(f"Failed to overwrite channel: {overwrite_message}")
+            else:
+                self.notify("Channel join cancelled.")
+        else:
+            self.notify(f"Failed to join channel {channel_name}: {result}")
+            self.logger.error(f"Failed to join channel {channel_name}: {result}")
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle submitted input."""
@@ -150,6 +187,17 @@ class MeshChatApp(App):
         elif destination == "advert":
             self.notify("Sending flood advert...")
             self.run_worker(self.radio_connector.send_advert)
+        
+        elif destination == "join":
+            channel_name = message_text
+            if not channel_name.startswith("#"):
+                self.notify("Error: Public channel names must start with '#'.")
+                return
+            if not self.radio_connector.radio:
+                self.notify("Error: Not connected to a radio.")
+                return
+
+            self.run_worker(self.process_join_command(channel_name))
         
         # Check if destination is a channel
         elif destination in self.channels:

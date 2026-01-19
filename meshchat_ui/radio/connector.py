@@ -8,6 +8,7 @@ from bleak.exc import BleakDBusError
 from meshchat_ui.radio.handler import RadioHandler
 from meshchat_ui.logger import get_logger
 from meshchat_ui.config import BLE_CONNECT_TIMEOUT, BLE_MAX_RETRIES, BLE_RETRY_DELAY, BLE_MAX_CHANNEL_ATTEMPTS
+import hashlib # Added for channel key generation
 
 if TYPE_CHECKING:
     from meshchat_ui.tui.app import MeshChatApp
@@ -106,6 +107,15 @@ class RadioConnector:
         self.debug_mode = debug_mode
         self.logger = get_logger(__name__, debug_mode=self.debug_mode)
 
+    @staticmethod
+    def _generate_channel_key(channel_name: str) -> bytes:
+        """
+        Generates the channel key for a public hashtag channel.
+        The key is the first 16 bytes of the SHA256 digest of the channel name.
+        """
+        sha256_hash = hashlib.sha256(channel_name.encode('utf-8')).digest()
+        return sha256_hash[:16]
+
     def set_bluetooth_radio(self, ble_address: str):
         self.radio = BluetoothRadio(ble_address, debug_mode=self.debug_mode)
 
@@ -149,6 +159,7 @@ class RadioConnector:
 
         try:
             result = await meshcore.commands.get_contacts()
+            self.logger.debug(f"get_contacts returned: {result}")
             if result and result.type != EventType.ERROR:
                 payload = result.payload
                 for key, contact_entry in payload.items():
@@ -179,6 +190,97 @@ class RadioConnector:
 
         return {"contacts": contacts, "channels": channels}
 
+    async def join_public_channel(self, channel_name: str) -> tuple[bool, str | None, list | None]:
+        """
+        Attempts to join a public hashtag channel.
+        Finds an empty slot or prompts the user to overwrite.
+        Returns: (success, message, extra_data)
+        """
+        meshcore = await self.get_meshcore()
+        if meshcore is None:
+            return False, "Radio not connected. Cannot join channel.", None
+
+        channel_key = self._generate_channel_key(channel_name)
+        channel_id_to_use = -1
+        empty_slot_found = False
+        already_joined = False
+        used_channels = []
+
+        self.logger.debug(f"Attempting to join channel {channel_name} with key {channel_key.hex()}")
+
+        # 1. Check existing channels and find an empty slot
+        for idx in range(BLE_MAX_CHANNEL_ATTEMPTS):
+            try:
+                chan_result = await meshcore.commands.get_channel(idx)
+                if chan_result and chan_result.type != EventType.ERROR:
+                    channel_info = chan_result.payload
+                    current_channel_name = channel_info.get("channel_name")
+                    current_channel_id = channel_info.get("channel_id") # Note: assuming channel_id might be different from idx
+
+                    self.logger.debug(f"Channel {idx}: {current_channel_name} (ID: {current_channel_id})")
+
+                    if current_channel_name == channel_name:
+                        already_joined = True
+                        channel_id_to_use = idx # Use existing slot
+                        break
+                    elif not current_channel_name and not empty_slot_found: # Assuming empty channel has no name
+                        empty_slot_found = True
+                        channel_id_to_use = idx
+                    else:
+                        used_channels.append({"id": idx, "name": current_channel_name or f"Unnamed {idx}"})
+                elif not empty_slot_found: # If error or no result, treat as potentially empty
+                    empty_slot_found = True
+                    channel_id_to_use = idx
+
+            except Exception as e:
+                self.logger.warning(f"Error getting channel {idx}: {e}", exc_info=True)
+                if not empty_slot_found:
+                    empty_slot_found = True
+                    channel_id_to_use = idx
+        
+        # 2. Assign channel to a slot
+        if already_joined:
+            self.logger.info(f"Already joined channel {channel_name} at slot {channel_id_to_use}")
+            return True, None, None
+        elif empty_slot_found and channel_id_to_use != -1:
+            self.logger.debug(f"Empty slot found at index {channel_id_to_use}. Setting channel.")
+            success, msg = await self._set_channel_config(meshcore, channel_id_to_use, channel_name, channel_key)
+            return success, msg, None
+        else:
+            # No empty slots found and channel not already joined
+            # Return special signal for UI to prompt for overwrite
+            self.logger.warning(f"No empty channel slots available for {channel_name}. Used channels: {used_channels}")
+            return False, "OVERWRITE_REQUIRED", used_channels
+    
+    async def overwrite_public_channel(self, channel_name: str, overwrite_channel_id: int) -> tuple[bool, str | None]:
+        """
+        Overwrites an existing channel with a new public hashtag channel.
+        """
+        meshcore = await self.get_meshcore()
+        if meshcore is None:
+            return False, "Radio not connected. Cannot overwrite channel."
+
+        channel_key = self._generate_channel_key(channel_name)
+        self.logger.debug(f"Overwriting channel {overwrite_channel_id} with {channel_name} (key: {channel_key.hex()})")
+
+        return await self._set_channel_config(meshcore, overwrite_channel_id, channel_name, channel_key)
+
+    async def _set_channel_config(self, meshcore: MeshCore, channel_idx: int, channel_name: str, channel_key: bytes) -> tuple[bool, str | None]:
+        """Helper to set channel configuration."""
+        try:
+            set_result = await meshcore.commands.set_channel(channel_idx, channel_name, channel_key)
+            if set_result and set_result.type != EventType.ERROR:
+                self.logger.info(f"Successfully set channel {channel_name} in slot {channel_idx}")
+                # Refresh channels list in app after successful join/overwrite
+                # This should probably be handled by the app's get_contacts_and_channels worker
+                return True, None
+            else:
+                error_msg = set_result.payload.get("error") if set_result else "Unknown error from set_channel"
+                return False, f"Failed to set channel {channel_name}: {error_msg}"
+        except Exception as e:
+            self.logger.error(f"Error setting channel {channel_name}: {e}", exc_info=True)
+            return False, f"Exception while setting channel: {e}"
+
     async def get_radio_info(self) -> dict | None:
         """Gets the radio info."""
         meshcore = await self.get_meshcore()
@@ -189,6 +291,7 @@ class RadioConnector:
         except Exception as e:
             self.logger.error(f"Error getting radio info: {e}", exc_info=True)
             return None
+
 
     async def subscribe(self) -> None:
         """Subscribes to new messages, channels, and adverts."""

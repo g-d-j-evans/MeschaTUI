@@ -16,6 +16,7 @@ class RadioHandler:
         self.meshcore = meshcore
         self.app = app
         self.subscriptions = []
+        self._is_listening = False
         self.debug_mode = debug_mode
         self.json_log_path = os.path.join(os.getcwd(), "radio_messages.json") # Log file in current working directory
         self.logger = get_logger(__name__, debug_mode=self.debug_mode)
@@ -153,6 +154,10 @@ class RadioHandler:
 
     async def start_listening(self):
         """Subscribes to message events and starts auto message fetching."""
+        if self._is_listening:
+            return
+
+        self._is_listening = True
         private_subscription = self.meshcore.subscribe(
             EventType.CONTACT_MSG_RECV, self.message_callback
         )
@@ -171,6 +176,10 @@ class RadioHandler:
 
     async def stop_listening(self):
         """Unsubscribes from all events and stops auto message fetching."""
+        if not self._is_listening:
+            return
+        
+        self._is_listening = False
         for subscription in self.subscriptions:
             self.meshcore.unsubscribe(subscription)
         self.subscriptions = []
