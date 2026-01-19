@@ -47,16 +47,21 @@ For the proper display of icons in the TUI, a Nerd Font is required. Please ensu
         ```
 
 3.  **Send a message:**
-    Once connected, you can send messages to a channel using the `to` command.
+    Once connected, you can send messages by typing in the message bar. prefix the message with the name of the contact or channel.
+    send a message to a channel
+     * < channel > < message >
+    to send to a contact
+     * < contact > < message >
     ```
-    to <channel-name> <your message>
-    ```
-    Direct messgaes not yet implemented
 
-## Commands
+4. Join a public hashtag channel
+   Type command join, followed by channel name (including #).
+     * join #test 
+   Joining Private channels not yet implemented.
 
-*   `disconnect`: Disconnect from the radio.
-*   `to <channel> <message>`: Send a message to a channel.
-*   `advert`: Send a flood advertisement.
+5. Disconnect client device
+     * disconnect
 
+6. Send a flood advert
+     * advert
 
