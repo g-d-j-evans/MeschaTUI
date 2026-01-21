@@ -152,6 +152,36 @@ class RadioHandler:
         except Exception as e:
             self.logger.error("Error in contacts_callback", exc_info=True)
 
+    def advert_callback(self, event):
+        """Callback for handling advertisement events."""
+        try:
+            self._log_json_message(event.payload)
+            self.logger.debug(f"Advertisement event payload: {event.payload}")
+            # Payload structure should be checked, but we assume it contains contact info.
+            # We will pass the payload directly to the app to store.
+            if hasattr(self.app, 'add_recent_advert'):
+                self.app.add_recent_advert(event.payload)
+        except Exception as e:
+            self.logger.error("Error in advert_callback", exc_info=True)
+
+    def new_contact_callback(self, event):
+        """Callback for handling new contact events."""
+        try:
+            self._log_json_message(event.payload)
+            self.logger.debug(f"New Contact event payload: {event.payload}")
+            if hasattr(self.app, 'add_recent_advert'):
+                self.app.add_recent_advert(event.payload)
+        except Exception as e:
+            self.logger.error("Error in new_contact_callback", exc_info=True)
+
+    def _generic_event_callback(self, event):
+        """Generic callback for logging all other events in debug mode."""
+        try:
+            self._log_json_message({"type": str(event.type), "payload": event.payload})
+            self.logger.debug(f"Generic event received: {event.type} - Payload: {event.payload}")
+        except Exception as e:
+            self.logger.error(f"Error in generic_event_callback for {event.type}", exc_info=True)
+
     async def start_listening(self):
         """Subscribes to message events and starts auto message fetching."""
         if self._is_listening:
@@ -167,10 +197,40 @@ class RadioHandler:
         contacts_subscription = self.meshcore.subscribe(
             EventType.CONTACTS, self.contacts_callback
         )
+        advert_subscription = self.meshcore.subscribe(
+            EventType.ADVERTISEMENT, self.advert_callback
+        )
+        new_contact_subscription = self.meshcore.subscribe(
+            EventType.NEW_CONTACT, self.new_contact_callback
+        )
         
         self.subscriptions.extend(
-            [private_subscription, channel_subscription, contacts_subscription]
+            [private_subscription, channel_subscription, contacts_subscription, advert_subscription, new_contact_subscription]
         )
+
+        if self.debug_mode:
+            handled_types = [
+                EventType.CONTACT_MSG_RECV,
+                EventType.CHANNEL_MSG_RECV,
+                EventType.CONTACTS,
+                EventType.ADVERTISEMENT,
+                EventType.NEW_CONTACT
+            ]
+            
+            for name in dir(EventType):
+                if name.startswith("_"):
+                    continue
+                event_type = getattr(EventType, name)
+                # Ensure it's a valid value to subscribe to (integers/enums)
+                if event_type in handled_types:
+                    continue
+                
+                try:
+                    sub = self.meshcore.subscribe(event_type, self._generic_event_callback)
+                    self.subscriptions.append(sub)
+                    self.logger.debug(f"Subscribed to extra event: {name}")
+                except Exception as e:
+                    self.logger.warning(f"Could not subscribe to event {name}: {e}")
 
         await self.meshcore.start_auto_message_fetching()
 

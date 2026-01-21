@@ -8,8 +8,10 @@ from meshchat_ui.radio.connector import RadioConnector
 from meshchat_ui.logger import get_logger
 from meshchat_ui.tui.sidebar import Sidebar
 from meshchat_ui.tui.connection_screen import ConnectionScreen
-from meshchat_ui.tui.channel_overwrite_screen import ChannelOverwriteScreen # New import
-import re # New import
+from meshchat_ui.tui.channel_overwrite_screen import ChannelOverwriteScreen
+from meshchat_ui.tui.advert_selection_screen import AdvertSelectionScreen
+from meshchat_ui.tui.contact_add_screen import ContactAddScreen
+import re
 
 
 class Message(Static):
@@ -80,6 +82,7 @@ class MeshChatApp(App):
         self.get_info_worker: Worker | None = None
         self.channels: dict[str, int] = {}
         self.contacts: list[dict] = []
+        self.recent_adverts: list[dict] = []
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -120,6 +123,28 @@ class MeshChatApp(App):
         message_display = self.query_one(MessageDisplay)
         message_display.mount(Message(message, is_sent=is_sent))
         message_display.scroll_end(animate=False)
+    
+    def add_recent_advert(self, advert: dict):
+        if self.debug_mode:
+            self.logger.debug(f"Adding recent advert: {advert}")
+
+        # Check for duplicates based on public_key or sender
+        key = advert.get("public_key") or advert.get("sender")
+        if not key:
+            if self.debug_mode:
+                self.logger.debug("Advert ignored due to missing public_key/sender")
+            return
+        
+        # Normalize: Ensure public_key is set if sender is available
+        if "sender" in advert and "public_key" not in advert:
+             advert["public_key"] = advert["sender"]
+        
+        # Remove existing if any (to move to top/update)
+        self.recent_adverts = [a for a in self.recent_adverts if (a.get("public_key") or a.get("sender")) != key]
+        self.recent_adverts.insert(0, advert)
+        # Keep last 50
+        if len(self.recent_adverts) > 50:
+            self.recent_adverts.pop()
 
     def update_contacts(self, contacts):
         contact_list = self.query_one("#contacts", ListView)
@@ -172,6 +197,29 @@ class MeshChatApp(App):
             self.notify(f"Failed to join channel {channel_name}: {result}")
             self.logger.error(f"Failed to join channel {channel_name}: {result}")
 
+    async def _add_contact_helper(self, contact_data: dict):
+        success, msg = await self.radio_connector.add_contact(contact_data)
+        if success:
+            self.notify(f"Contact '{contact_data.get('adv_name')}' added.")
+            self.run_worker(self.radio_connector.get_contacts_and_channels, name="get_lists")
+        else:
+            self.notify(f"Failed to add contact: {msg}")
+
+    async def _remove_contact_helper(self, public_key: str, name: str):
+        success, msg = await self.radio_connector.remove_contact(public_key)
+        if success:
+            self.notify(f"Contact '{name}' removed.")
+            self.run_worker(self.radio_connector.get_contacts_and_channels, name="get_lists")
+        else:
+            self.notify(f"Failed to remove contact '{name}': {msg}")
+
+    async def _send_advert_helper(self):
+        success, msg = await self.radio_connector.send_advert()
+        if success:
+            self.notify("Flood advert sent.")
+        else:
+            self.notify(f"Failed to send advert: {msg}")
+
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle submitted input."""
         parts = event.value.strip().split()
@@ -186,8 +234,41 @@ class MeshChatApp(App):
             self.disconnect_worker = self.run_worker(self.radio_connector.disconnect)
         elif destination == "advert":
             self.notify("Sending flood advert...")
-            self.run_worker(self.radio_connector.send_advert)
+            self.run_worker(self._send_advert_helper())
         
+        elif destination == "<add>":
+            def handle_save_contact(contact_data):
+                if contact_data:
+                    self.run_worker(self._add_contact_helper(contact_data))
+
+            def handle_add_choice(choice):
+                if choice == "MANUAL":
+                    self.push_screen(ContactAddScreen(), handle_save_contact)
+                elif isinstance(choice, dict):
+                    self.push_screen(ContactAddScreen(choice), handle_save_contact)
+            
+            self.push_screen(AdvertSelectionScreen(self.recent_adverts), handle_add_choice)
+
+        elif destination == "<remove>":
+            name_to_remove = message_text
+            contact = next((c for c in self.contacts if c['name'] == name_to_remove), None)
+            if contact:
+                self.run_worker(self._remove_contact_helper(contact['public_key'], name_to_remove))
+            else:
+                self.notify(f"Contact '{name_to_remove}' not found.")
+
+        elif destination == "<purge>":
+            type_str = message_text.lower()
+            type_map = {"client": 1, "repeater": 2, "room": 3}
+            target_type = type_map.get(type_str)
+            if target_type:
+                to_remove = [c for c in self.contacts if c.get('type') == target_type]
+                self.notify(f"Purging {len(to_remove)} contacts of type {type_str}...")
+                for c in to_remove:
+                    self.run_worker(self._remove_contact_helper(c['public_key'], c['name']))
+            else:
+                self.notify("Invalid type. Use: client, repeater, room")
+
         elif destination == "join":
             channel_name = message_text
             if not channel_name.startswith("#"):

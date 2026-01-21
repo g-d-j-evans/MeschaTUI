@@ -172,7 +172,9 @@ class RadioConnector:
                     contacts.append({
                         "name": name,
                         "type": contact_type,
-                        "public_key": key
+                        "public_key": key,
+                        "out_path": contact_entry.get("out_path"),
+                        "out_path_len": contact_entry.get("out_path_len")
                     })
         except Exception as e:
             self.logger.error("Error fetching contacts:", exc_info=True)
@@ -302,17 +304,21 @@ class RadioConnector:
                 self.app.add_message(f"Error subscribing to messages: {e}")
                 self.logger.error(f"Error subscribing: {e}", exc_info=True)
 
-    async def send_advert(self) -> bool:
+    async def send_advert(self) -> tuple[bool, str | None]:
         """Sends a flood advert."""
         meshcore = await self.get_meshcore()
         if meshcore is None:
-            return False
+            return False, "Radio not connected."
         try:
-            await meshcore.commands.send_advert(flood=True)
-            return True
+            result = await meshcore.commands.send_advert(flood=True)
+            if result and result.type == EventType.OK:
+                self.logger.info("Flood advert sent successfully.")
+                return True, None
+            else:
+                return False, f"Failed to send advert: {result}"
         except Exception as e:
             self.logger.error(f"Error sending advert: {e}", exc_info=True)
-            return False
+            return False, str(e)
 
     async def send_message(self, message: str, destination_id: str) -> tuple[bool, str | None]:
         """Sends a message to a specified destination."""
@@ -339,3 +345,77 @@ class RadioConnector:
         except Exception as e:
             self.logger.error(f"Error sending channel message to {channel_id}: {e}", exc_info=True)
             return False, f"Error sending channel message: {e}"
+
+    async def add_contact(self, contact_data: dict) -> tuple[bool, str | None]:
+        """Adds a contact to the radio."""
+        meshcore = await self.get_meshcore()
+        if meshcore is None:
+            return False, "Radio not connected."
+        try:
+            # Check if we have existing contact info to preserve path
+            public_key = contact_data.get("public_key") or contact_data.get("key")
+            if public_key and hasattr(self.app, "contacts"):
+                existing_contact = next((c for c in self.app.contacts if c.get("public_key") == public_key), None)
+                if existing_contact:
+                    # If new data lacks path or has "unknown" (-1) path, try to use existing
+                    new_len = contact_data.get("out_path_len", -1)
+                    
+                    if "out_path" not in contact_data or new_len < 0:
+                         if "out_path" in existing_contact:
+                             contact_data["out_path"] = existing_contact["out_path"]
+                         if "out_path_len" in existing_contact:
+                             contact_data["out_path_len"] = existing_contact["out_path_len"]
+
+            # ensure defaults if missing
+            contact_data.setdefault("out_path", "00" * 32)
+            contact_data.setdefault("out_path_len", 0)
+            contact_data.setdefault("flags", 0)
+            contact_data.setdefault("last_advert", 0)
+            contact_data.setdefault("adv_lat", 0.0)
+            contact_data.setdefault("adv_lon", 0.0)
+            contact_data.setdefault("type", 1)  # Client
+
+            # Ensure 'key' is present, as meshcore likely expects it
+            if "key" not in contact_data and "public_key" in contact_data:
+                contact_data["key"] = contact_data["public_key"]
+
+            # Handle out_path: Ensure it is a HEX STRING, not bytes.
+            out_path = contact_data.get("out_path")
+            
+            # If out_path is empty string or None, set to default hex string
+            if not out_path:
+                 contact_data["out_path"] = "00" * 32
+                 # Do not force out_path_len to 0. Leave it as is (often -1 for unknown).
+            
+            # If it was somehow bytes (legacy/error), convert back to hex string
+            elif isinstance(out_path, bytes):
+                contact_data["out_path"] = out_path.hex()
+
+            # Ensure out_path_len is NOT forced to 0 even if path is zeros
+            # This matches the state of other contacts in the logs (len: -1)
+
+            self.logger.debug(f"Adding contact with data: {contact_data}")
+
+            result = await meshcore.commands.add_contact(contact_data)
+            if result and result.type == EventType.OK:
+                return True, None
+            else:
+                return False, "Failed to add contact (Error response)"
+        except Exception as e:
+            self.logger.error(f"Error adding contact: {e}", exc_info=True)
+            return False, str(e)
+
+    async def remove_contact(self, public_key: str) -> tuple[bool, str | None]:
+        """Removes a contact from the radio."""
+        meshcore = await self.get_meshcore()
+        if meshcore is None:
+            return False, "Radio not connected."
+        try:
+            result = await meshcore.commands.remove_contact(public_key)
+            if result and result.type == EventType.OK:
+                return True, None
+            else:
+                return False, "Failed to remove contact"
+        except Exception as e:
+            self.logger.error(f"Error removing contact: {e}", exc_info=True)
+            return False, str(e)
