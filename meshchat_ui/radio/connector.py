@@ -320,31 +320,42 @@ class RadioConnector:
             self.logger.error(f"Error sending advert: {e}", exc_info=True)
             return False, str(e)
 
-    async def send_message(self, message: str, destination_id: str) -> tuple[bool, str | None]:
-        """Sends a message to a specified destination."""
+    async def send_message(self, message: str, destination_id: str) -> tuple[bool, str | None, Event | None]:
+        """Sends a message to a specified destination with automatic retries."""
         meshcore = await self.get_meshcore()
         if meshcore is None:
-            return False, "Radio not connected. Cannot send message."
+            return False, "Radio not connected. Cannot send message.", None
         try:
-            self.logger.debug(f"Sending message to {destination_id}")
-            await meshcore.commands.send_msg(destination_id, message)
-            return True, None
+            self.logger.debug(f"Sending message to {destination_id} with retry")
+            # send_msg_with_retry returns the MSG_SENT result event if successful (ACK received), else None
+            # Increasing attempts to improve delivery chance via repeaters
+            result = await meshcore.commands.send_msg_with_retry(
+                destination_id, message, max_attempts=4, max_flood_attempts=3, flood_after=2
+            )
+            if result:
+                return True, None, result
+            else:
+                return False, "Message delivery failed after retries (no ACK received)", None
         except Exception as e:
             self.logger.error(f"Error sending message to {destination_id}: {e}", exc_info=True)
-            return False, f"Error sending message: {e}"
+            return False, f"Error sending message: {e}", None
 
-    async def send_channel_message(self, message: str, channel_id: int) -> tuple[bool, str | None]:
+    async def send_channel_message(self, message: str, channel_id: int) -> tuple[bool, str | None, Event | None]:
         """Sends a message to a specified channel."""
         meshcore = await self.get_meshcore()
         if meshcore is None:
-            return False, "Radio not connected. Cannot send channel message."
+            return False, "Radio not connected. Cannot send channel message.", None
         try:
             self.logger.debug(f"Sending channel message to {channel_id}")
-            await meshcore.commands.send_chan_msg(chan=channel_id, msg=message)
-            return True, None
+            result = await meshcore.commands.send_chan_msg(chan=channel_id, msg=message)
+            if result and result.type != EventType.ERROR:
+                return True, None, result
+            else:
+                error_msg = result.payload.get("error", "Unknown error") if result else "No response"
+                return False, error_msg, result
         except Exception as e:
             self.logger.error(f"Error sending channel message to {channel_id}: {e}", exc_info=True)
-            return False, f"Error sending channel message: {e}"
+            return False, f"Error sending channel message: {e}", None
 
     async def add_contact(self, contact_data: dict) -> tuple[bool, str | None]:
         """Adds a contact to the radio."""
@@ -397,10 +408,14 @@ class RadioConnector:
             self.logger.debug(f"Adding contact with data: {contact_data}")
 
             result = await meshcore.commands.add_contact(contact_data)
+            self.logger.debug(f"add_contact response: {result}")
+            
             if result and result.type == EventType.OK:
                 return True, None
             else:
-                return False, "Failed to add contact (Error response)"
+                error_msg = result.payload.get("error", "Unknown error") if result else "Timeout/No response"
+                self.logger.error(f"Failed to add contact: {error_msg}")
+                return False, f"Failed to add contact: {error_msg}"
         except Exception as e:
             self.logger.error(f"Error adding contact: {e}", exc_info=True)
             return False, str(e)
@@ -411,11 +426,15 @@ class RadioConnector:
         if meshcore is None:
             return False, "Radio not connected."
         try:
+            self.logger.debug(f"Removing contact: {public_key}")
             result = await meshcore.commands.remove_contact(public_key)
+            self.logger.debug(f"remove_contact response: {result}")
             if result and result.type == EventType.OK:
                 return True, None
             else:
-                return False, "Failed to remove contact"
+                error_msg = result.payload.get("error", "Unknown error") if result else "Timeout/No response"
+                self.logger.error(f"Failed to remove contact: {error_msg}")
+                return False, f"Failed to remove contact: {error_msg}"
         except Exception as e:
             self.logger.error(f"Error removing contact: {e}", exc_info=True)
             return False, str(e)

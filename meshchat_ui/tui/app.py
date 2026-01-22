@@ -205,13 +205,27 @@ class MeshChatApp(App):
         else:
             self.notify(f"Failed to add contact: {msg}")
 
-    async def _remove_contact_helper(self, public_key: str, name: str):
+    async def _remove_contact_helper(self, public_key: str, name: str, refresh_list: bool = True):
         success, msg = await self.radio_connector.remove_contact(public_key)
         if success:
             self.notify(f"Contact '{name}' removed.")
-            self.run_worker(self.radio_connector.get_contacts_and_channels, name="get_lists")
+            if refresh_list:
+                self.run_worker(self.radio_connector.get_contacts_and_channels, name="get_lists")
         else:
             self.notify(f"Failed to remove contact '{name}': {msg}")
+
+    async def _purge_contacts_worker(self, contacts_to_remove: list, type_str: str):
+        """Worker to remove multiple contacts and refresh once at the end."""
+        self.notify(f"Purging {len(contacts_to_remove)} contacts of type {type_str}...")
+        for i, contact in enumerate(contacts_to_remove):
+            # Refresh list only on the last contact
+            is_last = (i == len(contacts_to_remove) - 1)
+            await self.radio_connector.remove_contact(contact['public_key'])
+            if (i + 1) % 5 == 0:
+                self.notify(f"Purged {i+1}/{len(contacts_to_remove)}...")
+        
+        self.notify(f"Purge of {type_str} complete.")
+        self.run_worker(self.radio_connector.get_contacts_and_channels, name="get_lists")
 
     async def _send_advert_helper(self):
         success, msg = await self.radio_connector.send_advert()
@@ -219,6 +233,29 @@ class MeshChatApp(App):
             self.notify("Flood advert sent.")
         else:
             self.notify(f"Failed to send advert: {msg}")
+
+    async def _send_message_worker(self, message_text: str, destination: str, destination_id: str | int, type_str: str):
+        """Worker to handle sending messages and updating the UI upon delivery confirmation."""
+        self.logger.debug(f"Starting _send_message_worker for {type_str} to {destination}")
+        self.notify(f"Sending {type_str} to {destination}...")
+        
+        if type_str == "DM":
+            # For DM, destination_id is public key string. send_message uses retry logic.
+            # We can pass extra params to try harder
+            success, error, _ = await self.radio_connector.send_message(message_text, str(destination_id))
+        else:
+            # For Channel, destination_id is channel integer index.
+            success, error, _ = await self.radio_connector.send_channel_message(message_text, int(destination_id))
+            
+        if success:
+            self.logger.debug(f"Message delivery confirmed for {destination}. Adding to UI.")
+            display_text = f"Sent {type_str} to {destination}: {message_text}"
+            self.add_message(display_text, is_sent=True)
+            self.notify("Message delivered")
+        else:
+            self.logger.warning(f"Message delivery failed for {destination}: {error}")
+            self.notify(f"Failed to send: {error}")
+            self.logger.error(f"Failed to send to {destination}: {error}")
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle submitted input."""
@@ -263,9 +300,7 @@ class MeshChatApp(App):
             target_type = type_map.get(type_str)
             if target_type:
                 to_remove = [c for c in self.contacts if c.get('type') == target_type]
-                self.notify(f"Purging {len(to_remove)} contacts of type {type_str}...")
-                for c in to_remove:
-                    self.run_worker(self._remove_contact_helper(c['public_key'], c['name']))
+                self.run_worker(self._purge_contacts_worker(to_remove, type_str))
             else:
                 self.notify("Invalid type. Use: client, repeater, room")
 
@@ -283,30 +318,14 @@ class MeshChatApp(App):
         # Check if destination is a channel
         elif destination in self.channels:
             channel_id = self.channels[destination]
-            self.add_message(
-                f"Sending to {destination}: {message_text}", is_sent=True
-            )
-            send_success, send_message_error = await self.radio_connector.send_channel_message(
-                message_text, channel_id
-            )
-            if not send_success:
-                self.notify(f"Failed to send channel message: {send_message_error}")
-                self.logger.error(f"Failed to send channel message: {send_message_error}")
+            self.run_worker(self._send_message_worker(message_text, destination, channel_id, "to"))
         
         # Check if destination is a client
         else:
             recipient = next((c for c in self.contacts if c['name'] == destination and c['type'] == 1), None)
             if recipient:
                 destination_id = recipient['public_key']
-                self.add_message(
-                    f"Sending DM to {destination}: {message_text}", is_sent=True
-                )
-                send_success, send_message_error = await self.radio_connector.send_message(
-                    message_text, destination_id
-                )
-                if not send_success:
-                    self.notify(f"Failed to send direct message: {send_message_error}")
-                    self.logger.error(f"Failed to send direct message: {send_message_error}")
+                self.run_worker(self._send_message_worker(message_text, destination, destination_id, "DM"))
             else:
                 self.notify(f"Unknown command or destination: {destination}")
 

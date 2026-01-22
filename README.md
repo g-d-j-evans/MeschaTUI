@@ -65,3 +65,10 @@ For the proper display of icons in the TUI, a Nerd Font is required. Please ensu
 6. Send a flood advert
      * advert
 
+### Message Delivery Confirmation
+
+Messages sent via the TUI are only added to the chat window once their delivery is confirmed by the radio:
+- **Direct Messages**: Displayed after an `ACK` is received from the destination (includes automatic retries and fallback to flood routing).
+- **Channel Messages**: Displayed once the radio confirms the command has been broadcast (`OK` status).
+- **Notifications**: Temporary toast notifications will indicate the "Sending..." status while confirmation is pending.
+
