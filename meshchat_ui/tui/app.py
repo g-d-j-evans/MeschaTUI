@@ -1,8 +1,9 @@
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.containers import Vertical, VerticalScroll
-from textual.widgets import Input, Static, ListView, ListItem
+from textual.widgets import Input, Static, ListView, ListItem, Footer
 from textual.worker import Worker, WorkerState
+from textual.command import Provider, Hit, DiscoveryHit
 
 from datetime import datetime
 from meshchat_ui.radio.connector import RadioConnector
@@ -30,10 +31,68 @@ class MessageDisplay(VerticalScroll):
     pass
 
 
+class MeshChatCommandProvider(Provider):
+    """A command provider for the MeshChat app."""
+
+    async def discover(self) -> DiscoveryHit:
+        """Yield discovery hits for the command palette."""
+        commands = [
+            ("/channels", self.app.action_show_channels, "Show subscribed channels"),
+            ("/contacts", self.app.action_show_contacts, "Show contacts list"),
+            ("/radio", self.app.action_show_radio_stats, "Show radio information and stats"),
+            ("/advert", self.app.action_send_advert, "Send a flood advertisement"),
+            ("/add", self.app.action_add_contact, "Add a new contact"),
+            ("/remove", self.app.action_remove_contact, "Remove an existing contact"),
+            ("/purge", self.app.action_purge_contacts, "Purge contacts by type"),
+            ("/join", self.app.action_join_channel, "Join a public channel"),
+            ("/disconnect", self.app.action_disconnect, "Disconnect from the radio"),
+        ]
+        for name, callback, help_text in commands:
+            yield DiscoveryHit(
+                name,
+                callback,
+                help=help_text,
+            )
+
+    async def search(self, query: str) -> Hit:
+        """Search for commands."""
+        matcher = self.matcher(query)
+
+        commands = [
+            ("/channels", self.app.action_show_channels, "Show subscribed channels"),
+            ("/contacts", self.app.action_show_contacts, "Show contacts list"),
+            ("/radio", self.app.action_show_radio_stats, "Show radio information and stats"),
+            ("/advert", self.app.action_send_advert, "Send a flood advertisement"),
+            ("/add", self.app.action_add_contact, "Add a new contact"),
+            ("/remove", self.app.action_remove_contact, "Remove an existing contact"),
+            ("/purge", self.app.action_purge_contacts, "Purge contacts by type"),
+            ("/join", self.app.action_join_channel, "Join a public channel"),
+            ("/disconnect", self.app.action_disconnect, "Disconnect from the radio"),
+        ]
+
+        for name, callback, help_text in commands:
+            score = matcher.match(name)
+            if score > 0:
+                yield Hit(
+                    score,
+                    matcher.highlight(name),
+                    callback,
+                    help=help_text,
+                )
+
+
 class MeshChatApp(App):
     """A Textual app to chat over a mesh radio."""
 
     CSS_PATH = "style.css"
+    COMMANDS = App.COMMANDS | {MeshChatCommandProvider}
+    BINDINGS = [
+        ("ctrl+p", "command_palette", "Commands"),
+        ("ctrl+c", "quit", "Quit"),
+        ("ctrl+l", "show_channels", "Channels"),
+        ("ctrl+k", "show_contacts", "Contacts"),
+        ("ctrl+r", "show_radio_stats", "Radio"),
+    ]
 
     def __init__(self, debug_mode: bool = False):
         super().__init__()
@@ -54,7 +113,8 @@ class MeshChatApp(App):
         """Create child widgets for the app."""
         yield Header()
         yield MessageDisplay()
-        yield Input(placeholder="Type a command or message...", id="chat-input")
+        yield Input(placeholder="<channel|contact> <message> or /command", id="chat-input")
+        yield Footer()
 
     def on_mount(self) -> None:
         """Called when the app is mounted."""
@@ -89,6 +149,66 @@ class MeshChatApp(App):
         """Fetch and show the radio statistics screen."""
         self.notify("Fetching radio statistics...")
         self.run_worker(self._get_radio_summary(), name="get_radio_summary")
+
+    def action_disconnect(self):
+        """Disconnect from the radio."""
+        self.notify("Disconnecting from radio...")
+        self.disconnect_worker = self.run_worker(self.radio_connector.disconnect)
+
+    def action_send_advert(self):
+        """Send a flood advertisement."""
+        self.notify("Sending flood advert...")
+        self.run_worker(self._send_advert_helper())
+
+    def action_add_contact(self):
+        """Open the add contact screen."""
+        def handle_save_contact(contact_data):
+            if contact_data:
+                self.run_worker(self._add_contact_helper(contact_data))
+
+        def handle_add_choice(choice):
+            if choice == "MANUAL":
+                self.push_screen(ContactAddScreen(), handle_save_contact)
+            elif isinstance(choice, dict):
+                self.push_screen(ContactAddScreen(choice), handle_save_contact)
+        
+        self.push_screen(AdvertSelectionScreen(self.recent_adverts), handle_add_choice)
+
+    def action_remove_contact(self, name: str | None = None):
+        """Remove a contact by name."""
+        if name:
+            contact = next((c for c in self.contacts if c['name'] == name), None)
+            if contact:
+                self.run_worker(self._remove_contact_helper(contact['public_key'], name))
+            else:
+                self.notify(f"Contact '{name}' not found.")
+        else:
+            self.notify("Usage: <remove> <name>")
+
+    def action_purge_contacts(self, type_str: str | None = None):
+        """Purge contacts of a specific type (client, repeater, room)."""
+        if type_str:
+            type_map = {"client": 1, "repeater": 2, "room": 3}
+            target_type = type_map.get(type_str.lower())
+            if target_type:
+                to_remove = [c for c in self.contacts if c.get('type') == target_type]
+                self.run_worker(self._purge_contacts_worker(to_remove, type_str))
+            else:
+                self.notify("Invalid type. Use: client, repeater, room")
+        else:
+            self.notify("Usage: <purge> <type>")
+
+    def action_join_channel(self, channel_name: str | None = None):
+        """Join a public channel starting with #."""
+        if channel_name:
+            if not channel_name.startswith("#"):
+                self.notify("Error: Public channel names must start with '#'.")
+            elif not self.radio_connector.radio:
+                self.notify("Error: Not connected to a radio.")
+            else:
+                self.run_worker(self.process_join_command(channel_name))
+        else:
+            self.notify("Usage: join <#channel>")
 
     async def _get_radio_summary(self) -> dict:
         """Fetch multiple pieces of radio information concurrently."""
@@ -260,75 +380,45 @@ class MeshChatApp(App):
         if not parts:
             return
 
-        command = parts[0].lower()
+        first_part = parts[0].lower()
         message_text = " ".join(parts[1:])
 
-        if command == "disconnect":
-            self.notify("Disconnecting from radio...")
-            self.disconnect_worker = self.run_worker(self.radio_connector.disconnect)
-        elif command == "advert":
-            self.notify("Sending flood advert...")
-            self.run_worker(self._send_advert_helper())
-        elif command == "channels":
-            self.action_show_channels()
-        elif command == "contacts":
-            self.action_show_contacts()
-        elif command == "radio":
-            self.action_show_radio_stats()
-        
-        elif command == "<add>":
-            def handle_save_contact(contact_data):
-                if contact_data:
-                    self.run_worker(self._add_contact_helper(contact_data))
-
-            def handle_add_choice(choice):
-                if choice == "MANUAL":
-                    self.push_screen(ContactAddScreen(), handle_save_contact)
-                elif isinstance(choice, dict):
-                    self.push_screen(ContactAddScreen(choice), handle_save_contact)
-            
-            self.push_screen(AdvertSelectionScreen(self.recent_adverts), handle_add_choice)
-
-        elif command == "<remove>":
-            name_to_remove = message_text
-            contact = next((c for c in self.contacts if c['name'] == name_to_remove), None)
-            if contact:
-                self.run_worker(self._remove_contact_helper(contact['public_key'], name_to_remove))
+        if first_part.startswith("/"):
+            command = first_part[1:] # strip the slash
+            if command == "disconnect":
+                self.action_disconnect()
+            elif command == "advert":
+                self.action_send_advert()
+            elif command == "channels":
+                self.action_show_channels()
+            elif command == "contacts":
+                self.action_show_contacts()
+            elif command == "radio":
+                self.action_show_radio_stats()
+            elif command == "add":
+                self.action_add_contact()
+            elif command == "remove":
+                self.action_remove_contact(message_text)
+            elif command == "purge":
+                self.action_purge_contacts(message_text)
+            elif command == "join":
+                self.action_join_channel(message_text)
             else:
-                self.notify(f"Contact '{name_to_remove}' not found.")
-
-        elif command == "<purge>":
-            type_str = message_text.lower()
-            type_map = {"client": 1, "repeater": 2, "room": 3}
-            target_type = type_map.get(type_str)
-            if target_type:
-                to_remove = [c for c in self.contacts if c.get('type') == target_type]
-                self.run_worker(self._purge_contacts_worker(to_remove, type_str))
-            else:
-                self.notify("Invalid type. Use: client, repeater, room")
-
-        elif command == "join":
-            channel_name = message_text
-            if not channel_name.startswith("#"):
-                self.notify("Error: Public channel names must start with '#'.")
-            elif not self.radio_connector.radio:
-                self.notify("Error: Not connected to a radio.")
-            else:
-                self.run_worker(self.process_join_command(channel_name))
+                self.notify(f"Unknown command: /{command}")
         
-        # Check if destination is a channel
-        elif command in self.channels:
-            channel_id = self.channels[command]
-            self.run_worker(self._send_message_worker(message_text, command, channel_id, "to"))
+        # Check if first_part is a channel
+        elif first_part in self.channels:
+            channel_id = self.channels[first_part]
+            self.run_worker(self._send_message_worker(message_text, first_part, channel_id, "to"))
         
-        # Check if destination is a client
+        # Check if first_part is a client
         else:
-            recipient = next((c for c in self.contacts if c['name'] == command and c['type'] == 1), None)
+            recipient = next((c for c in self.contacts if c['name'] == first_part and c['type'] == 1), None)
             if recipient:
                 destination_id = recipient['public_key']
-                self.run_worker(self._send_message_worker(message_text, command, destination_id, "DM"))
+                self.run_worker(self._send_message_worker(message_text, first_part, destination_id, "DM"))
             else:
-                self.notify(f"Unknown command or destination: {command}")
+                self.notify(f"Unknown command or destination: {first_part}")
 
         event.input.value = ""
 

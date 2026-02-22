@@ -43,27 +43,36 @@ For the proper display of icons in the TUI, a Nerd Font is required. Please ensu
         `radio_messages.json` in the project root directory.
 
 2.  **Connect to your radio:**
-     * enter the name, serial port (normally /dev/ttyUSB0) and the correct baud rate for your device.
-        ```
+     * Choose between Serial or Bluetooth connection tabs.
+     * For Serial: Enter the device name, port (e.g., `/dev/ttyUSB0`), and baud rate (default `115200`).
+     * For Bluetooth: Scan for and select your device from the list.
 
-3.  **Send a message:**
-    Once connected, you can send messages by typing in the message bar. prefix the message with the name of the contact or channel.
-    send a message to a channel
-     * < channel > < message >
-    to send to a contact
-     * < contact > < message >
-    ```
+3.  **Interface Overview:**
+    *   **Header Bar**: Displays the connected radio name and counts for subscribed channels and contacts.
+        *   Click the **Radio Name** or type `/radio` to view detailed radio information and statistics.
+        *   Click the **Channels Count** or type `/channels` to see an overlay of subscribed channels.
+        *   Click the **Contacts Count** or type `/contacts` to see an overlay of known contacts. Select a contact from the list to view its details.
+    *   **Command Palette**: Press `ctrl+p` or `f1` to open the command palette and search for available actions.
+    *   **Footer**: Shows quick key bindings for common actions.
 
-4. Join a public hashtag channel
-   Type command join, followed by channel name (including #).
-     * join #test 
-   Joining Private channels not yet implemented.
+4.  **Send a message or run a command:**
+    Type into the bottom input bar using one of these formats:
+    *   **Send to Channel**: `<channel_name> <message>` (e.g., `#general Hello everyone!`)
+    *   **Send Direct Message**: `<contact_name> <message>` (e.g., `Alice Hi there!`)
+    *   **Run a Command**: `/command [args]` (e.g., `/join #meshchat`)
 
-5. Disconnect client device
-     * disconnect
+### Available Commands
 
-6. Send a flood advert
-     * advert
+All commands are prefixed with a forward slash `/`:
+*   `/channels`: Show subscribed channels overlay.
+*   `/contacts`: Show known contacts overlay.
+*   `/radio`: Show detailed radio info and statistics.
+*   `/join <#channel>`: Join a public hashtag channel.
+*   `/add`: Open the screen to add a new contact (from recent adverts or manually).
+*   `/remove <name>`: Remove a contact by their name.
+*   `/purge <client|repeater|room>`: Remove all contacts of a specific type.
+*   `/advert`: Send a flood advertisement from your radio.
+*   `/disconnect`: Disconnect from the radio and return to the connection screen.
 
 ### Message Delivery Confirmation
 
