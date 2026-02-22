@@ -45,6 +45,7 @@ class RadioHandler:
 
     def message_callback(self, event):
         try:
+            from rich.text import Text
             self._log_json_message(event.payload) # Log the raw payload
             
             self.logger.debug(f"Message event payload: {event.payload}")
@@ -58,9 +59,7 @@ class RadioHandler:
             sender_name_from_payload = event.payload.get("sender_name")
             channel_id = event.payload.get("channel_idx")
             timestamp = event.payload.get("sender_timestamp")
-
-            from datetime import datetime
-            local_time = datetime.fromtimestamp(timestamp).strftime("%d;%m %H:%M") if timestamp else "No timestamp"
+            path_len = event.payload.get("path_len", 0)
 
             self.logger.debug(f"full_sender_pubkey: {full_sender_pubkey}")
             self.logger.debug(f"sender_name_from_payload: {sender_name_from_payload}")
@@ -123,24 +122,42 @@ class RadioHandler:
 
             self.logger.debug(f"Final determined sender name: {determined_sender_name}")
 
-            # Construct the output string based on message type and sender info
-            output_string = ""
+            # Construct the Rich Text output based on message type and sender info
+            text = Text()
 
-            if event.type == EventType.CONTACT_MSG_RECV: # Direct Message
-                channel_display_part = "[DM]"
-                output_string = f"{local_time} {channel_display_part} {determined_sender_name}: {message_text}"
+            # 1. Date and Time Part (DD/MM HH:MM)
+            from datetime import datetime
+            if timestamp:
+                local_time = datetime.fromtimestamp(timestamp).strftime("%d/%m %H:%M")
+            else:
+                local_time = "??/?? ??:??"
 
-            else: # Channel Message (EventType.CHANNEL_MSG_RECV)
+            # 2. Channel / DM Part
+            if event.type == EventType.CONTACT_MSG_RECV:
+                channel_name = "[DM]"
+            else:
                 channels_by_id = {v: k for k, v in self.app.channels.items()}
-                channel_name = channels_by_id.get(channel_id, f"Channel {channel_id}")
-                channel_display_part = f"[{channel_name}]"
+                channel_name = channels_by_id.get(channel_id, f"#{channel_id}")
+                if not (channel_name.startswith("#") or channel_name.startswith("[")):
+                    channel_name = f"#{channel_name}"
+            
+            text.append(f" {local_time} {channel_name} ({path_len}) ", style="black on green")
+            text.append("\u25b6", style="green")
+            text.append(" ")
+            
+            # 3. Indicator Part (✔/✘)
+            indicator = "✔" if is_known_contact else "✘"
+            text.append(indicator, style="white")
+            text.append(" ")
+            
+            # 4. Sender Name Part (Name:)
+            text.append(f"{determined_sender_name}:", style="white")
+            text.append(" ")
+            
+            # 5. Message Text (Bold White)
+            text.append(message_text, style="bold white")
 
-                if is_known_contact: # Sender is a known contact
-                    output_string = f"{local_time} {channel_display_part} {determined_sender_name}: {message_text}"
-                else: # Sender is not a known contact
-                    output_string = f"{local_time} {channel_display_part} Unknown Sender: {determined_sender_name}: {message_text}"
-
-            self.app.add_message(output_string)
+            self.app.add_message(text)
 
         except Exception as e:
             self.logger.error("Error in message_callback", exc_info=True)

@@ -4,6 +4,7 @@ from textual.containers import Vertical, VerticalScroll
 from textual.widgets import Input, Static, ListView, ListItem
 from textual.worker import Worker, WorkerState
 
+from datetime import datetime
 from meshchat_ui.radio.connector import RadioConnector
 from meshchat_ui.logger import get_logger
 from meshchat_ui.tui.sidebar import Sidebar
@@ -15,8 +16,8 @@ import re
 
 
 class Message(Static):
-    def __init__(self, message_content: str, is_sent: bool = False, **kwargs):
-        super().__init__(Text(message_content), **kwargs)
+    def __init__(self, message_content: str | Text, is_sent: bool = False, **kwargs):
+        super().__init__(message_content, **kwargs)
         self.is_sent = is_sent
         self.add_class("message-sent" if is_sent else "message-received")
 
@@ -65,7 +66,6 @@ class MeshChatApp(App):
     }
 
     .message-sent {
-        color: grey;
         margin: 1 2;
         padding: 0 1;
     }
@@ -119,7 +119,7 @@ class MeshChatApp(App):
             self.radio_connector.connect_radio(), exclusive=True
         )
 
-    def add_message(self, message: str, is_sent: bool = False):
+    def add_message(self, message: str | Text, is_sent: bool = False):
         message_display = self.query_one(MessageDisplay)
         message_display.mount(Message(message, is_sent=is_sent))
         message_display.scroll_end(animate=False)
@@ -249,8 +249,18 @@ class MeshChatApp(App):
             
         if success:
             self.logger.debug(f"Message delivery confirmed for {destination}. Adding to UI.")
-            display_text = f"Sent {type_str} to {destination}: {message_text}"
-            self.add_message(display_text, is_sent=True)
+            
+            text = Text()
+            time_str = datetime.now().strftime("%d/%m %H:%M")
+            # 1. Channel or Contact Part (with Time inside highlight, all black text)
+            text.append(f" {time_str} {destination} ", style="black on cyan")
+            text.append("\u25b6", style="cyan")
+            text.append(" ")
+            
+            # 2. Message Text (Bold White)
+            text.append(message_text, style="bold white")
+            
+            self.add_message(text, is_sent=True)
             self.notify("Message delivered")
         else:
             self.logger.warning(f"Message delivery failed for {destination}: {error}")
