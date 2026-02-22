@@ -1,0 +1,168 @@
+/* Global App Styling */
+
+Screen {
+    layout: vertical;
+    background: $background;
+}
+
+/* Header Styling */
+Header {
+    height: 1;
+    dock: top;
+    background: $background;
+}
+
+Header #radio-name {
+    content-align: left middle;
+    width: 50%;
+    padding: 0 1;
+    background: $panel;
+}
+
+Header #channel-count, Header #contact-count {
+    content-align: right middle;
+    width: 25%;
+    padding: 0 1;
+    background: $panel;
+}
+
+Header #channel-count:hover, Header #contact-count:hover, Header #radio-name:hover {
+    background: $boost;
+}
+
+/* Main Content Area */
+MessageDisplay {
+    height: 1fr;
+    padding: 1 2;
+}
+
+/* Chat Input Area */
+#chat-input {
+    dock: bottom;
+    background: $panel;
+    border: none;
+    padding: 0 1;
+}
+
+/* Message Styling */
+.message-received {
+    color: $text;
+    margin: 0 0 1 0;
+}
+
+.message-sent {
+    margin: 0 0 1 0;
+}
+
+/* Modal Overlay Styling */
+ModalScreen {
+    align: center middle;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.modal-container {
+    width: 80%;
+    height: auto;
+    max-height: 80%;
+    border: round $primary;
+    background: $surface;
+    padding: 1;
+}
+
+.modal-header {
+    background: $primary;
+    color: $text;
+    text-align: center;
+    text-style: bold;
+    width: 100%;
+    margin-bottom: 1;
+}
+
+/* Generic List/Grid Styling in Modals */
+ListView {
+    background: $surface;
+    border: none;
+}
+
+ListItem {
+    padding: 0 1;
+}
+
+ListItem:hover {
+    background: $boost;
+}
+
+/* Radio Stats Specific */
+#radio-stats-grid {
+    grid-size: 4;
+    grid-gutter: 0 1;
+    padding: 0 1;
+}
+
+.category-header {
+    background: $secondary;
+    color: $text;
+    text-align: center;
+    text-style: bold;
+    margin: 1 0;
+    column-span: 4;
+}
+
+.stat-label {
+    content-align: right middle;
+    text-style: bold;
+    color: $accent;
+    height: 1;
+}
+
+.stat-value {
+    content-align: left middle;
+    height: 1;
+}
+
+/* Connection Screen Specific */
+#connection-dialog {
+    width: 60;
+    height: auto;
+    min-height: 25;
+}
+
+#connection-dialog Label {
+    margin-top: 1;
+}
+
+#connection-dialog Input {
+    margin-bottom: 1;
+    border: round $primary;
+}
+
+#connection-dialog Button {
+    margin-top: 1;
+    width: 100%;
+}
+
+.hidden {
+    display: none;
+}
+
+/* Small Dialog Styling (Add Contact, Advert Selection) */
+.dialog-container {
+    width: 60;
+    height: auto;
+    min-height: 15;
+    border: thick $primary 80%;
+    background: $surface;
+    padding: 1;
+}
+
+/* Button Group Styling */
+.button-group {
+    width: 100%;
+    height: 3;
+    align: center middle;
+    margin-top: 1;
+}
+
+.button-group Button {
+    margin: 0 1;
+}

@@ -5,27 +5,14 @@ from textual.containers import Vertical
 class ChannelListScreen(ModalScreen):
     """A modal screen to display the list of channels."""
 
-    CSS = """
-    ChannelListScreen {
-        align: center middle;
-    }
-
-    #channel-list-container {
-        width: 60%;
-        height: 70%;
-        border: round white;
-        background: $surface;
-    }
-    """
-
     def __init__(self, channels: dict[str, int], *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.channels = channels
 
     def compose(self):
         """Create the content of the screen."""
-        with Vertical(id="channel-list-container"):
-            yield Static("Subscribed Channels (Press any key to close)", classes="header")
+        with Vertical(id="channel-list-container", classes="modal-container"):
+            yield Static("Subscribed Channels (Press any key to close)", classes="modal-header")
             yield ListView(id="channel-list-view")
 
     def on_mount(self):

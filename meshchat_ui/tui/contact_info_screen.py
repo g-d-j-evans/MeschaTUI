@@ -5,33 +5,14 @@ from textual.containers import Vertical, Grid
 class ContactInfoScreen(ModalScreen):
     """A modal screen to display detailed information about a contact."""
 
-    CSS = """
-    ContactInfoScreen {
-        align: center middle;
-    }
-
-    #contact-info-container {
-        width: 80%;
-        height: 50%;
-        border: round white;
-        background: $surface;
-    }
-
-    #contact-info-grid {
-        grid-size: 2;
-        grid-gutter: 1;
-        padding: 1;
-    }
-    """
-
     def __init__(self, contact: dict, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.contact = contact
 
     def compose(self):
         """Create the content of the screen."""
-        with Vertical(id="contact-info-container"):
-            yield Static(f"Details for {self.contact.get('name', 'Unknown')} (Press any key to close)", classes="header")
+        with Vertical(id="contact-info-container", classes="modal-container"):
+            yield Static(f"Details for {self.contact.get('name', 'Unknown')} (Press any key to close)", classes="modal-header")
             
             with Grid(id="contact-info-grid"):
                 yield Static("Name:")

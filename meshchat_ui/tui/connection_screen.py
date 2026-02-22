@@ -11,78 +11,15 @@ import asyncio
 class ConnectionScreen(ModalScreen[dict]):
     """A modal screen for managing radio connections."""
 
-    CSS = """
-    ConnectionScreen {
-        align: center middle;
-    }
-
-    #connection-dialog {
-        width: 80w;
-        height: auto;
-        min-height: 30;
-        padding: 2;
-        border: round white;
-        background: $surface;
-    }
-
-    .hidden {
-        display: none;
-    }
-    
-    #connection-dialog Input {
-        margin-bottom: 1;
-        border: round white;
-        display: block;
-    }
-
-    ListView {
-        border: round white;
-        margin: 1;
-        height: 8;
-    }
-
-    Checkbox {
-        margin-top: 1;
-        margin-bottom: 1;
-    }
-
-    Tabs {
-        background: $surface;
-    }
-
-    Tab {
-        background: $surface;
-        color: $text;
-    }
-
-    Tab.active {
-        background: $primary;
-        color: $text;
-    }
-
-    Button {
-        height: 1;
-        padding: 0 1;
-        background: red;
-        color: white;
-        border: none;
-        margin-top: 1;
-    }
-
-    Button:hover {
-        background: $primary;
-    }
-    """
-
     def compose(self) -> ComposeResult:
-        with Vertical(id="connection-dialog"):
+        with Vertical(id="connection-dialog", classes="modal-container"):
             yield Tabs(
                 Tab("Serial", id="serial-tab"),
                 Tab("Bluetooth", id="bt-tab"),
                 id="tabs",
             )
             with Vertical(id="serial-view"):
-                yield Label("Serial Connection")
+                yield Label("Serial Connection", classes="modal-header")
                 yield Input(placeholder="Device Name (e.g., My Radio)", id="device-name-input")
                 yield Input(placeholder="Port (e.g., /dev/ttyUSB0)", id="port-input")
                 yield Input(value="115200", id="baud-rate-input")
@@ -90,7 +27,7 @@ class ConnectionScreen(ModalScreen[dict]):
                 yield Button("Connect", id="serial-connect-button")
 
             with Vertical(id="bt-view", classes="hidden"):
-                yield Label("Bluetooth Low Energy (BLE) Connection")
+                yield Label("Bluetooth Low Energy (BLE) Connection", classes="modal-header")
                 yield ListView(id="bt-device-list")
                 yield Button("Scan for devices", id="bt-scan-button")
                 yield Button("Connect", id="bt-connect-button")

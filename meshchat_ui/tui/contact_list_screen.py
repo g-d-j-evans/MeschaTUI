@@ -5,27 +5,14 @@ from textual.containers import Vertical
 class ContactListScreen(ModalScreen):
     """A modal screen to display the list of contacts."""
 
-    CSS = """
-    ContactListScreen {
-        align: center middle;
-    }
-
-    #contact-list-container {
-        width: 60%;
-        height: 70%;
-        border: round white;
-        background: $surface;
-    }
-    """
-
     def __init__(self, contacts: list[dict], *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.contacts = contacts
 
     def compose(self):
         """Create the content of the screen."""
-        with Vertical(id="contact-list-container"):
-            yield Static("Contacts (Select to view, ESC to close)", classes="header")
+        with Vertical(id="contact-list-container", classes="modal-container"):
+            yield Static("Contacts (Select to view, ESC to close)", classes="modal-header")
             yield ListView(id="contact-list-view")
 
     def on_mount(self):

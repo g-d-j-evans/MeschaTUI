@@ -284,7 +284,7 @@ class RadioConnector:
             return False, f"Exception while setting channel: {e}"
 
     async def get_radio_info(self) -> dict | None:
-        """Gets the radio info."""
+        """Gets the self info (radio info)."""
         meshcore = await self.get_meshcore()
         if meshcore is None:
             return None
@@ -292,6 +292,34 @@ class RadioConnector:
             return meshcore.self_info
         except Exception as e:
             self.logger.error(f"Error getting radio info: {e}", exc_info=True)
+            return None
+
+    async def get_device_info(self) -> dict | None:
+        """Gets the device information."""
+        meshcore = await self.get_meshcore()
+        if meshcore is None:
+            return None
+        try:
+            result = await meshcore.commands.get_device_info()
+            if result and result.type == EventType.DEVICE_INFO:
+                return result.payload
+            return None
+        except Exception as e:
+            self.logger.error(f"Error getting device info: {e}", exc_info=True)
+            return None
+
+    async def get_radio_stats(self) -> dict | None:
+        """Gets the radio statistics."""
+        meshcore = await self.get_meshcore()
+        if meshcore is None:
+            return None
+        try:
+            result = await meshcore.commands.get_stats_radio()
+            if result and result.type == EventType.STATS_RADIO:
+                return result.payload
+            return None
+        except Exception as e:
+            self.logger.error(f"Error getting radio stats: {e}", exc_info=True)
             return None
 
 

@@ -15,6 +15,7 @@ from meshchat_ui.tui.contact_add_screen import ContactAddScreen
 from meshchat_ui.tui.channel_list_screen import ChannelListScreen
 from meshchat_ui.tui.contact_list_screen import ContactListScreen
 from meshchat_ui.tui.contact_info_screen import ContactInfoScreen
+from meshchat_ui.tui.radio_stats_screen import RadioStatsScreen
 import re
 
 
@@ -32,53 +33,7 @@ class MessageDisplay(VerticalScroll):
 class MeshChatApp(App):
     """A Textual app to chat over a mesh radio."""
 
-    CSS = """
-    Screen {
-        layout: vertical;
-    }
-
-    Header {
-        height: 3;
-        dock: top;
-        background: $panel;
-        border-bottom: heavy white;
-    }
-
-    Header #radio-name {
-        content-align: left middle;
-        width: 50%;
-        padding: 0 1;
-    }
-
-    Header #channel-count, Header #contact-count {
-        content-align: right middle;
-        width: 25%;
-        padding: 0 1;
-    }
-
-    Header #channel-count:hover, Header #contact-count:hover {
-        background: $boost;
-    }
-
-    MessageDisplay {
-        height: 1fr;
-    }
-
-    #chat-input {
-        dock: bottom;
-    }
-
-    .message-received {
-        color: white;
-        margin: 1 2;
-        padding: 0 1;
-    }
-
-    .message-sent {
-        margin: 1 2;
-        padding: 0 1;
-    }
-    """
+    CSS_PATH = "style.css"
 
     def __init__(self, debug_mode: bool = False):
         super().__init__()
@@ -93,6 +48,7 @@ class MeshChatApp(App):
         self.contacts: list[dict] = []
         self.recent_adverts: list[dict] = []
         self.radio_info: dict = {}
+        self.subscribed: bool = False
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -114,6 +70,8 @@ class MeshChatApp(App):
             self.action_show_channels()
         elif event.widget.id == "contact-count":
             self.action_show_contacts()
+        elif event.widget.id == "radio-name":
+            self.action_show_radio_stats()
 
     def action_show_channels(self):
         """Show the channel list screen."""
@@ -126,6 +84,25 @@ class MeshChatApp(App):
                 self.push_screen(ContactInfoScreen(contact_data))
         
         self.push_screen(ContactListScreen(self.contacts), show_contact_info)
+
+    def action_show_radio_stats(self):
+        """Fetch and show the radio statistics screen."""
+        self.notify("Fetching radio statistics...")
+        self.run_worker(self._get_radio_summary(), name="get_radio_summary")
+
+    async def _get_radio_summary(self) -> dict:
+        """Fetch multiple pieces of radio information concurrently."""
+        import asyncio
+        results = await asyncio.gather(
+            self.radio_connector.get_radio_info(),
+            self.radio_connector.get_device_info(),
+            self.radio_connector.get_radio_stats()
+        )
+        return {
+            "self_info": results[0],
+            "device_info": results[1],
+            "radio_stats": results[2]
+        }
 
     def action_start_connection(self, connection_details: dict):
         """Start the connection process based on details from the connection screen."""
@@ -296,6 +273,8 @@ class MeshChatApp(App):
             self.action_show_channels()
         elif command == "contacts":
             self.action_show_contacts()
+        elif command == "radio":
+            self.action_show_radio_stats()
         
         elif command == "<add>":
             def handle_save_contact(contact_data):
@@ -332,12 +311,10 @@ class MeshChatApp(App):
             channel_name = message_text
             if not channel_name.startswith("#"):
                 self.notify("Error: Public channel names must start with '#'.")
-                return
-            if not self.radio_connector.radio:
+            elif not self.radio_connector.radio:
                 self.notify("Error: Not connected to a radio.")
-                return
-
-            self.run_worker(self.process_join_command(channel_name))
+            else:
+                self.run_worker(self.process_join_command(channel_name))
         
         # Check if destination is a channel
         elif command in self.channels:
@@ -405,15 +382,23 @@ class MeshChatApp(App):
                     total_channels=self.radio_info.get("max_channels", 0)
                 )
 
-                self.notify("Subscribing to new messages...")
-                self.run_worker(self.radio_connector.subscribe, name="subscribe")
+                if not self.subscribed:
+                    self.run_worker(self.radio_connector.subscribe, name="subscribe")
             elif event.state == WorkerState.ERROR:
                 self.notify("Failed to fetch contacts and channels.")
                 self.logger.error("Failed to fetch contacts and channels.")
 
         elif event.worker.name == "subscribe":
             if event.state == WorkerState.SUCCESS:
-                self.notify("Subscribed to new messages.")
+                self.subscribed = True
             elif event.state == WorkerState.ERROR:
                 self.notify("Failed to subscribe to new messages.")
                 self.logger.error("Failed to subscribe to new messages.")
+
+        elif event.worker.name == "get_radio_summary":
+            if event.state == WorkerState.SUCCESS:
+                summary = event.worker.result
+                self.push_screen(RadioStatsScreen(summary))
+            elif event.state == WorkerState.ERROR:
+                self.notify("Failed to fetch radio statistics.")
+                self.logger.error("Failed to fetch radio statistics.")

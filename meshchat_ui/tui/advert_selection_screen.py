@@ -11,10 +11,10 @@ class AdvertSelectionScreen(ModalScreen):
         self.adverts = adverts
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="dialog"):
-            yield Label("Select a contact to add:", id="title")
+        with Vertical(id="dialog", classes="dialog-container"):
+            yield Label("Select a contact to add:", classes="modal-header")
             yield ListView(id="advert-list")
-            with Horizontal(id="buttons"):
+            with Horizontal(id="buttons", classes="button-group"):
                 yield Button("Manual Add", variant="primary", id="manual")
                 yield Button("Cancel", variant="error", id="cancel")
 
@@ -39,40 +39,3 @@ class AdvertSelectionScreen(ModalScreen):
         elif event.button.id == "cancel":
             self.dismiss(None)
 
-    CSS = """
-    AdvertSelectionScreen {
-        align: center middle;
-    }
-
-    #dialog {
-        grid-size: 2;
-        grid-gutter: 1 2;
-        grid-rows: 1fr 3;
-        padding: 0 1;
-        width: 60;
-        height: 20;
-        border: thick $background 80%;
-        background: $surface;
-    }
-
-    #title {
-        column-span: 2;
-        height: 1;
-        width: 100%;
-        content-align: center middle;
-    }
-
-    #advert-list {
-        column-span: 2;
-        height: 1fr;
-        width: 100%;
-        border: solid $accent;
-    }
-
-    #buttons {
-        column-span: 2;
-        width: 100%;
-        height: 3;
-        align: center middle;
-    }
-    """

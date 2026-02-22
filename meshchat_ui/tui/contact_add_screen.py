@@ -11,13 +11,13 @@ class ContactAddScreen(ModalScreen):
         self.contact_data = contact_data or {}
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="dialog"):
-            yield Label("Add Contact", id="title")
+        with Vertical(id="dialog", classes="dialog-container"):
+            yield Label("Add Contact", classes="modal-header")
             yield Label("Name:")
             yield Input(value=self.contact_data.get("adv_name", ""), id="name-input", placeholder="Enter contact name")
             yield Label("Public Key:")
             yield Input(value=self.contact_data.get("public_key", self.contact_data.get("sender", "")), id="key-input", placeholder="Enter public key (hex)")
-            with Horizontal(id="buttons"):
+            with Horizontal(id="buttons", classes="button-group"):
                 yield Button("Save", variant="success", id="save")
                 yield Button("Cancel", variant="error", id="cancel")
 
@@ -40,36 +40,3 @@ class ContactAddScreen(ModalScreen):
         elif event.button.id == "cancel":
             self.dismiss(None)
 
-    CSS = """
-    ContactAddScreen {
-        align: center middle;
-    }
-
-    #dialog {
-        padding: 0 1;
-        width: 60;
-        height: 20;
-        border: thick $background 80%;
-        background: $surface;
-    }
-
-    #title {
-        content-align: center middle;
-        width: 100%;
-        margin-bottom: 1;
-    }
-
-    Input {
-        margin-bottom: 1;
-    }
-
-    #buttons {
-        width: 100%;
-        align: center middle;
-        margin-top: 1;
-    }
-    
-    Button {
-        margin: 0 1;
-    }
-    """

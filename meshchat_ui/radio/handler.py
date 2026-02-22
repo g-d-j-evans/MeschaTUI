@@ -165,7 +165,11 @@ class RadioHandler:
     def contacts_callback(self, event):
         """Callback for handling contacts events."""
         try:
-            self.app.update_contacts(event.payload)
+            # We no longer trigger a full get_lists refresh here because get_lists
+            # itself triggers this event, creating a loop.
+            # Unsolicited updates will be handled by NEXT_CONTACT/NEW_CONTACT if needed,
+            # or we can manually refresh.
+            pass
         except Exception as e:
             self.logger.error("Error in contacts_callback", exc_info=True)
 
