@@ -7,11 +7,14 @@ from textual.worker import Worker, WorkerState
 from datetime import datetime
 from meshchat_ui.radio.connector import RadioConnector
 from meshchat_ui.logger import get_logger
-from meshchat_ui.tui.sidebar import Sidebar
+from meshchat_ui.tui.header import Header
 from meshchat_ui.tui.connection_screen import ConnectionScreen
 from meshchat_ui.tui.channel_overwrite_screen import ChannelOverwriteScreen
 from meshchat_ui.tui.advert_selection_screen import AdvertSelectionScreen
 from meshchat_ui.tui.contact_add_screen import ContactAddScreen
+from meshchat_ui.tui.channel_list_screen import ChannelListScreen
+from meshchat_ui.tui.contact_list_screen import ContactListScreen
+from meshchat_ui.tui.contact_info_screen import ContactInfoScreen
 import re
 
 
@@ -31,32 +34,38 @@ class MeshChatApp(App):
 
     CSS = """
     Screen {
-        layout: horizontal;
+        layout: vertical;
     }
 
-    Sidebar {
-        width: 15%;
-        height: 100%;
+    Header {
+        height: 3;
+        dock: top;
+        background: $panel;
+        border-bottom: heavy white;
     }
 
-    Sidebar .header {
-        background: white;
-        color: black;
-        text-align: center;
+    Header #radio-name {
+        content-align: left middle;
+        width: 50%;
+        padding: 0 1;
     }
 
-    Sidebar ListView {
-        border: round white;
-        margin: 1;
+    Header #channel-count, Header #contact-count {
+        content-align: right middle;
+        width: 25%;
+        padding: 0 1;
     }
 
-    #main-content {
-        width: 85%;
-        height: 100%;
+    Header #channel-count:hover, Header #contact-count:hover {
+        background: $boost;
     }
 
-    Input {
-        border: round white;
+    MessageDisplay {
+        height: 1fr;
+    }
+
+    #chat-input {
+        dock: bottom;
     }
 
     .message-received {
@@ -83,13 +92,13 @@ class MeshChatApp(App):
         self.channels: dict[str, int] = {}
         self.contacts: list[dict] = []
         self.recent_adverts: list[dict] = []
+        self.radio_info: dict = {}
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
-        yield Sidebar()
-        with Vertical(id="main-content"):
-            yield MessageDisplay()
-            yield Input(placeholder="Type <channel> <message> or <client> <message>")
+        yield Header()
+        yield MessageDisplay()
+        yield Input(placeholder="Type a command or message...", id="chat-input")
 
     def on_mount(self) -> None:
         """Called when the app is mounted."""
@@ -98,6 +107,25 @@ class MeshChatApp(App):
                 self.action_start_connection(connection_details)
         
         self.push_screen(ConnectionScreen(), connection_callback)
+
+    def on_click(self, event) -> None:
+        """Handle click events."""
+        if event.widget.id == "channel-count":
+            self.action_show_channels()
+        elif event.widget.id == "contact-count":
+            self.action_show_contacts()
+
+    def action_show_channels(self):
+        """Show the channel list screen."""
+        self.push_screen(ChannelListScreen(self.channels))
+
+    def action_show_contacts(self):
+        """Show the contact list screen."""
+        def show_contact_info(contact_data):
+            if contact_data:
+                self.push_screen(ContactInfoScreen(contact_data))
+        
+        self.push_screen(ContactListScreen(self.contacts), show_contact_info)
 
     def action_start_connection(self, connection_details: dict):
         """Start the connection process based on details from the connection screen."""
@@ -146,24 +174,6 @@ class MeshChatApp(App):
         if len(self.recent_adverts) > 50:
             self.recent_adverts.pop()
 
-    def update_contacts(self, contacts):
-        contact_list = self.query_one("#contacts", ListView)
-        contact_list.clear()
-        for contact in contacts:
-            if not isinstance(contact, dict):
-                self.logger.debug(f"Skipping invalid contact entry: {contact}")
-                continue
-            contact_type = contact.get("type")
-            contact_name = contact.get("name", "Unknown")
-            if contact_type == 1:  # Client
-                display_name = f" {contact_name}"
-            elif contact_type == 2:  # Repeater
-                display_name = f" {contact_name}"
-            elif contact_type == 3: # Room Server
-                display_name = f" {contact_name}"
-            else:
-                display_name = contact_name
-            contact_list.append(ListItem(Static(display_name)))
 
     async def process_join_command(self, channel_name: str) -> None:
         self.notify(f"Attempting to join public channel {channel_name}...")
@@ -273,17 +283,21 @@ class MeshChatApp(App):
         if not parts:
             return
 
-        destination = parts[0]
+        command = parts[0].lower()
         message_text = " ".join(parts[1:])
 
-        if destination == "disconnect":
+        if command == "disconnect":
             self.notify("Disconnecting from radio...")
             self.disconnect_worker = self.run_worker(self.radio_connector.disconnect)
-        elif destination == "advert":
+        elif command == "advert":
             self.notify("Sending flood advert...")
             self.run_worker(self._send_advert_helper())
+        elif command == "channels":
+            self.action_show_channels()
+        elif command == "contacts":
+            self.action_show_contacts()
         
-        elif destination == "<add>":
+        elif command == "<add>":
             def handle_save_contact(contact_data):
                 if contact_data:
                     self.run_worker(self._add_contact_helper(contact_data))
@@ -296,7 +310,7 @@ class MeshChatApp(App):
             
             self.push_screen(AdvertSelectionScreen(self.recent_adverts), handle_add_choice)
 
-        elif destination == "<remove>":
+        elif command == "<remove>":
             name_to_remove = message_text
             contact = next((c for c in self.contacts if c['name'] == name_to_remove), None)
             if contact:
@@ -304,7 +318,7 @@ class MeshChatApp(App):
             else:
                 self.notify(f"Contact '{name_to_remove}' not found.")
 
-        elif destination == "<purge>":
+        elif command == "<purge>":
             type_str = message_text.lower()
             type_map = {"client": 1, "repeater": 2, "room": 3}
             target_type = type_map.get(type_str)
@@ -314,7 +328,7 @@ class MeshChatApp(App):
             else:
                 self.notify("Invalid type. Use: client, repeater, room")
 
-        elif destination == "join":
+        elif command == "join":
             channel_name = message_text
             if not channel_name.startswith("#"):
                 self.notify("Error: Public channel names must start with '#'.")
@@ -326,18 +340,18 @@ class MeshChatApp(App):
             self.run_worker(self.process_join_command(channel_name))
         
         # Check if destination is a channel
-        elif destination in self.channels:
-            channel_id = self.channels[destination]
-            self.run_worker(self._send_message_worker(message_text, destination, channel_id, "to"))
+        elif command in self.channels:
+            channel_id = self.channels[command]
+            self.run_worker(self._send_message_worker(message_text, command, channel_id, "to"))
         
         # Check if destination is a client
         else:
-            recipient = next((c for c in self.contacts if c['name'] == destination and c['type'] == 1), None)
+            recipient = next((c for c in self.contacts if c['name'] == command and c['type'] == 1), None)
             if recipient:
                 destination_id = recipient['public_key']
-                self.run_worker(self._send_message_worker(message_text, destination, destination_id, "DM"))
+                self.run_worker(self._send_message_worker(message_text, command, destination_id, "DM"))
             else:
-                self.notify(f"Unknown command or destination: {destination}")
+                self.notify(f"Unknown command or destination: {command}")
 
         event.input.value = ""
 
@@ -361,9 +375,10 @@ class MeshChatApp(App):
 
         elif event.worker.name == "get_info":
             if event.state == WorkerState.SUCCESS:
-                info = event.worker.result
-                if info:
+                self.radio_info = event.worker.result
+                if self.radio_info:
                     self.notify("Successfully fetched radio info.")
+                    self.query_one(Header).update_header(radio_name=self.radio_info.get("name", "Unknown Radio"))
                 else:
                     self.notify("Failed to fetch radio info.")
                     self.logger.error("Failed to fetch radio info.")
@@ -383,16 +398,12 @@ class MeshChatApp(App):
                     channel["name"]: channel["id"] for channel in data["channels"]
                 }
                 
-                channel_names = list(self.channels.keys())
-                # Only suggest clients for direct messages
-                contact_names = [c["name"] for c in self.contacts if c['type'] == 1]
-
-                channel_list = self.query_one("#channels", ListView)
-                channel_list.clear()
-                for channel in data["channels"]:
-                    channel_list.append(ListItem(Static(channel["name"])))
-
-                self.update_contacts(self.contacts)
+                # Update header counts
+                self.query_one(Header).update_header(
+                    channel_count=len(self.channels), 
+                    contact_count=len(self.contacts),
+                    total_channels=self.radio_info.get("max_channels", 0)
+                )
 
                 self.notify("Subscribing to new messages...")
                 self.run_worker(self.radio_connector.subscribe, name="subscribe")

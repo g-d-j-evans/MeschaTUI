@@ -19,6 +19,7 @@ class ConnectionScreen(ModalScreen[dict]):
     #connection-dialog {
         width: 80w;
         height: auto;
+        min-height: 30;
         padding: 2;
         border: round white;
         background: $surface;
@@ -28,9 +29,10 @@ class ConnectionScreen(ModalScreen[dict]):
         display: none;
     }
     
-    Input {
+    #connection-dialog Input {
         margin-bottom: 1;
         border: round white;
+        display: block;
     }
 
     ListView {
