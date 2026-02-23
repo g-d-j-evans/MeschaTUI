@@ -31,6 +31,29 @@ class MessageDisplay(VerticalScroll):
     pass
 
 
+class CharacterCount(Static):
+    """A widget to display the character count of an input."""
+    def __init__(self, count: int = 0, max_len: int = 129, **kwargs):
+        super().__init__(f"{count}/{max_len}", **kwargs)
+        self.count = count
+        self.max_len = max_len
+
+    def update_count(self, count: int):
+        self.count = count
+        self.update(f"{self.count}/{self.max_len}")
+        if self.count >= self.max_len:
+            self.add_class("count-warn")
+        else:
+            self.remove_class("count-warn")
+
+
+class CustomInput(Static):
+    """A custom input widget that includes a character count."""
+    def compose(self) -> ComposeResult:
+        yield Input(placeholder="<channel|contact> <message> or /command", id="chat-input")
+        yield CharacterCount(id="char-count")
+
+
 class MeshChatCommandProvider(Provider):
     """A command provider for the MeshChat app."""
 
@@ -113,7 +136,7 @@ class MeshChatApp(App):
         """Create child widgets for the app."""
         yield Header()
         yield MessageDisplay()
-        yield Input(placeholder="<channel|contact> <message> or /command", id="chat-input")
+        yield CustomInput(id="input-container")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -123,6 +146,20 @@ class MeshChatApp(App):
                 self.action_start_connection(connection_details)
         
         self.push_screen(ConnectionScreen(), connection_callback)
+
+    def _get_message_length(self, input_value: str) -> int:
+        """Calculate the length of the message part of the input."""
+        parts = input_value.strip().split()
+        if len(parts) > 1 and not parts[0].startswith("/"):
+            message_text = " ".join(parts[1:])
+            return len(message_text)
+        return 0
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Handle input changes to update character count."""
+        if event.input.id == "chat-input":
+            count = self._get_message_length(event.value)
+            self.query_one("#char-count", CharacterCount).update_count(count)
 
     def on_click(self, event) -> None:
         """Handle click events."""
@@ -341,38 +378,70 @@ class MeshChatApp(App):
         else:
             self.notify(f"Failed to send advert: {msg}")
 
+    def _split_message(self, message: str, limit: int = 129) -> list[str]:
+        """Split a message into segments of at most 'limit' characters."""
+        if len(message) <= limit:
+            return [message]
+        
+        segments = []
+        while message:
+            if len(message) <= limit:
+                segments.append(message)
+                break
+            
+            # Find the last space within the limit
+            split_idx = message.rfind(" ", 0, limit + 1)
+            if split_idx == -1:
+                # No space found, split at limit
+                split_idx = limit
+            
+            segments.append(message[:split_idx].strip())
+            message = message[split_idx:].strip()
+            
+        return segments
+
     async def _send_message_worker(self, message_text: str, destination: str, destination_id: str | int, type_str: str):
         """Worker to handle sending messages and updating the UI upon delivery confirmation."""
         self.logger.debug(f"Starting _send_message_worker for {type_str} to {destination}")
-        self.notify(f"Sending {type_str} to {destination}...")
         
-        if type_str == "DM":
-            # For DM, destination_id is public key string. send_message uses retry logic.
-            # We can pass extra params to try harder
-            success, error, _ = await self.radio_connector.send_message(message_text, str(destination_id))
-        else:
-            # For Channel, destination_id is channel integer index.
-            success, error, _ = await self.radio_connector.send_channel_message(message_text, int(destination_id))
+        segments = self._split_message(message_text)
+        total_segments = len(segments)
+        
+        for i, segment in enumerate(segments):
+            progress_msg = f" ({i+1}/{total_segments})" if total_segments > 1 else ""
+            self.notify(f"Sending {type_str}{progress_msg} to {destination}...")
             
-        if success:
-            self.logger.debug(f"Message delivery confirmed for {destination}. Adding to UI.")
-            
-            text = Text()
-            time_str = datetime.now().strftime("%d/%m %H:%M")
-            # 1. Channel or Contact Part (with Time inside highlight, all black text)
-            text.append(f" {time_str} {destination} ", style="black on cyan")
-            text.append("\u25b6", style="cyan")
-            text.append(" ")
-            
-            # 2. Message Text (Bold White)
-            text.append(message_text, style="bold white")
-            
-            self.add_message(text, is_sent=True)
-            self.notify("Message delivered")
-        else:
-            self.logger.warning(f"Message delivery failed for {destination}: {error}")
-            self.notify(f"Failed to send: {error}")
-            self.logger.error(f"Failed to send to {destination}: {error}")
+            if type_str == "DM":
+                success, error, _ = await self.radio_connector.send_message(segment, str(destination_id))
+            else:
+                success, error, _ = await self.radio_connector.send_channel_message(segment, int(destination_id))
+                
+            if success:
+                self.logger.debug(f"Message segment {i+1} delivery confirmed for {destination}. Adding to UI.")
+                
+                text = Text()
+                time_str = datetime.now().strftime("%d/%m %H:%M")
+                segment_info = f" [{i+1}/{total_segments}]" if total_segments > 1 else ""
+                
+                # 1. Channel or Contact Part
+                text.append(f" {time_str} {destination}{segment_info} ", style="black on cyan")
+                text.append("\u25b6", style="cyan")
+                text.append(" ")
+                
+                # 2. Message Text (Bold White)
+                text.append(segment, style="bold white")
+                
+                self.add_message(text, is_sent=True)
+            else:
+                self.logger.warning(f"Message delivery failed for {destination} segment {i+1}: {error}")
+                self.notify(f"Failed to send{progress_msg}: {error}")
+                self.logger.error(f"Failed to send to {destination} segment {i+1}: {error}")
+                break # Stop sending further segments if one fails
+        
+        if total_segments > 1 and success:
+             self.notify(f"All {total_segments} segments delivered to {destination}")
+        elif success:
+             self.notify("Message delivered")
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle submitted input."""

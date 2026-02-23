@@ -37,11 +37,32 @@ MessageDisplay {
 }
 
 /* Chat Input Area */
-#chat-input {
+#input-container {
     dock: bottom;
+    layout: horizontal;
+    background: $panel;
+    height: 3;
+    padding: 0 1;
+}
+
+#chat-input {
+    width: 1fr;
     background: $panel;
     border: none;
     padding: 0 1;
+    height: 3;
+}
+
+#char-count {
+    width: 8;
+    content-align: center middle;
+    color: $text-muted;
+    background: $panel;
+}
+
+#char-count.count-warn {
+    color: $warning;
+    text-style: bold;
 }
 
 /* Message Styling */
@@ -163,6 +184,3 @@ ListItem:hover {
     margin-top: 1;
 }
 
-.button-group Button {
-    margin: 0 1;
-}

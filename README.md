@@ -56,6 +56,10 @@ This is a personal project created as a learning experience, and for my specific
     *   **Send Direct Message**: `<contact_name> <message>` (e.g., `Alice Hi there!`)
     *   **Run a Command**: `/command [args]` (e.g., `/join #meshchat`)
 
+    **Message Bar Features:**
+    *   **Character Count**: A real-time counter shows the length of your current message relative to the 129-character limit.
+    *   **Automatic Splitting**: If your message exceeds 129 characters, the application will automatically split it into multiple segments and send them sequentially. Each segment is labeled with its position (e.g., `[1/2]`) in the chat window.
+
 ### Available Commands
 
 All commands are prefixed with a forward slash `/`:

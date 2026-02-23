@@ -9,8 +9,8 @@ async def test_send_message_converts_key():
     
     # Mock MeshCore
     mock_meshcore = AsyncMock()
-    # Mock send_msg instead of send_msg_with_retry
-    mock_meshcore.commands.send_msg = AsyncMock()
+    # Mock send_msg_with_retry instead of send_msg
+    mock_meshcore.commands.send_msg_with_retry = AsyncMock(return_value=True)
     
     # Create Connector
     connector = RadioConnector(mock_app)
@@ -20,13 +20,13 @@ async def test_send_message_converts_key():
     hex_key = "a" * 64
     message = "Hello"
     
-    success, err = await connector.send_message(message, hex_key)
+    success, err, event = await connector.send_message(message, hex_key)
     
     assert success is True
     assert err is None
     
-    # Verify call args for send_msg
-    args, _ = mock_meshcore.commands.send_msg.call_args
+    # Verify call args for send_msg_with_retry
+    args, kwargs = mock_meshcore.commands.send_msg_with_retry.call_args
     destination, msg = args
     
     # Expect string now
@@ -38,7 +38,7 @@ async def test_send_message_converts_key():
     alias = "some_alias"
     await connector.send_message(message, alias)
     
-    args, _ = mock_meshcore.commands.send_msg.call_args
+    args, kwargs = mock_meshcore.commands.send_msg_with_retry.call_args
     destination, msg = args
     
     assert isinstance(destination, str)
