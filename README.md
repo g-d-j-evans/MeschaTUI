@@ -4,6 +4,7 @@ MeshChaTUI is a Textual TUI wrapper over [Meshcore_py](https://github.com/meshco
 This is a personal project created as a learning experience, and for my specific requirements. I do not have access to a lot of devices or other machines. Testing has been limited to what i have on hand. Several Heltec v3 boards and has only been run on a linux machine. I dont see any reason why it wouldnt run on Windows or MAC os (as it is entirely python), but there are no guarentees that this will work. 
 
 ## Screenshot
+![MeshChatTUI Screenshot](screenshots/MeshChatApp_2026-02-23T00_13_58_022967.svg)
 
 ## Installation
 
