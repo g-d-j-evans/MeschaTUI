@@ -42,7 +42,7 @@ This was created and tested on a linux, with alacritty as my terminal. Devices u
 2.  **Connect to your radio:**
      * Choose between Serial (recommended) or Bluetooth connection tabs.
      * For Serial: Enter the device name, port (e.g., `/dev/ttyUSB0`), and baud rate (default `115200`).
-     * For Bluetooth: Scan for and select your device from the list. Note. Bluetooth communication works but is in my experience very dependant on the hardware on you computer and the device. Also serial communication seems faster.
+     * For Bluetooth: Scan for and select your device from the list. Note. Bluetooth communication works but is in my experience very dependant on the hardware on you computer and the device. I find it is better to pair your radio first to the device rather than relying on the app to do the pairing.
 
 3.  **Interface Overview:**
     *   **Header Bar**: Displays the connected radio name and counts for subscribed channels and contacts.
