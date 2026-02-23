@@ -1,7 +1,9 @@
 # MeshChaTUI
-MeshChaTUI is a Textual TUI wrapper over [Meshcore_py](https://github.com/meshcore-dev/meshcore_py). The aims were to provide a terminal application to interact with Meshcore companion radios. I wanted a unified message window, where all messages were displayed from all subscribed channels and direct messages from contacts in chronological order.
+MeshChaTUI is a Textual TUI wrapper over [Meshcore_py](https://github.com/meshcore-dev/meshcore_py). The aims were to provide a terminal application to interact with Meshcore companion radios. I wanted a unified message window, where all messages were displayed from all subscribed channels and contacts in chronological order.
 
-This is a personal project created as a learning experience, and for my specific requirements. I do not have access to a lot of devices or other machines. Testing has been limited to what i have on hand. Several Heltec v3 boards and has only been run on a linux machine. I dont see any reason why it wouldnt run on Windows or MAC os (as it is entirely python), but there are no guarentees that this will work. 
+This is a personal project created as a learning experience, and for my specific requirements. Feel free to take the project and change it to suit yourself.At this time there is no plan to package this, that may change if i get to a point where i think it is done.
+
+This was created and tested on a linux, with alacritty as my terminal. Devices used were heltec V3's 
 
 ## Screenshot
 ![MeshChatTUI Screenshot](screenshots/MeshChatApp_2026-02-23T00_13_58_022967.svg)
@@ -38,9 +40,9 @@ This is a personal project created as a learning experience, and for my specific
         `radio_messages.json` in the project root directory.
 
 2.  **Connect to your radio:**
-     * Choose between Serial or Bluetooth connection tabs.
+     * Choose between Serial (recommended) or Bluetooth connection tabs.
      * For Serial: Enter the device name, port (e.g., `/dev/ttyUSB0`), and baud rate (default `115200`).
-     * For Bluetooth: Scan for and select your device from the list.
+     * For Bluetooth: Scan for and select your device from the list. Note. Bluetooth communication works but is in my experience very dependant on the hardware on you computer and the device. Also serial communication seems faster.
 
 3.  **Interface Overview:**
     *   **Header Bar**: Displays the connected radio name and counts for subscribed channels and contacts.
