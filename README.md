@@ -1,12 +1,9 @@
 # MeshChaTUI
+MeshChaTUI is a Textual TUI wrapper over [Meshcore_py](https://github.com/meshcore-dev/meshcore_py). The aims were to provide a terminal application to interact with Meshcore companion radios. I wanted a unified message window, where all messages were displayed from all subscribed channels and direct messages from contacts in chronological order.
 
-This is a personal project, so use with caution. Playing with a Meshcore radio, i didnt want to have to use my phoneone all the time. Also the phone application only allows you to monitor messages from one channel or contact. I wanted a unified messaging view. The Meshcore_PY library does all the work in connecting to the companion radio. All this project does is put a Textual UI around it.
+This is a personal project created as a learning experience, and for my specific requirements. I do not have access to a lot of devices or other machines. Testing has been limited to what i have on hand. Several Heltec v3 boards and has only been run on a linux machine. I dont see any reason why it wouldnt run on Windows or MAC os (as it is entirely python), but there are no guarentees that this will work. 
 
-Dont expect everything to work. I dont have a lot of devices to test against. My setup is a linux machine and a Heltec V3 lora radio. The terminal i use is Alacritty
-
-bluetooth connection is possible, but i have found it flakey, i would suggest connecting over USB serial. You will need to ensure that you have the correct permissions to access the device from the terminal.
-
-This is very much a MVP.. just to see what is possible.
+## Screenshot
 
 ## Installation
 
@@ -27,9 +24,6 @@ This is very much a MVP.. just to see what is possible.
     pip install -r requirements.txt
     ```
 
-### Font Requirements
-
-For the proper display of icons in the TUI, a Nerd Font is required. Please ensure you have a Nerd Font installed and configured in your terminal emulator.
 
 ## Usage
 
