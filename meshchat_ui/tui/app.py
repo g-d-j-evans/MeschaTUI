@@ -449,7 +449,8 @@ class MeshChatApp(App):
         if not parts:
             return
 
-        first_part = parts[0].lower()
+        original_first_part = parts[0].rstrip(":")
+        first_part = original_first_part.lower()
         message_text = " ".join(parts[1:])
 
         if first_part.startswith("/"):
@@ -476,18 +477,18 @@ class MeshChatApp(App):
                 self.notify(f"Unknown command: /{command}")
         
         # Check if first_part is a channel
-        elif first_part in self.channels:
-            channel_id = self.channels[first_part]
-            self.run_worker(self._send_message_worker(message_text, first_part, channel_id, "to"))
-        
+        elif original_first_part in self.channels:
+            channel_id = self.channels[original_first_part]
+            self.run_worker(self._send_message_worker(message_text, original_first_part, channel_id, "to"))
+
         # Check if first_part is a client
         else:
-            recipient = next((c for c in self.contacts if c['name'] == first_part and c['type'] == 1), None)
+            recipient = next((c for c in self.contacts if c['name'] == original_first_part and c['type'] == 1), None)
             if recipient:
                 destination_id = recipient['public_key']
-                self.run_worker(self._send_message_worker(message_text, first_part, destination_id, "DM"))
+                self.run_worker(self._send_message_worker(message_text, original_first_part, destination_id, "DM"))
             else:
-                self.notify(f"Unknown command or destination: {first_part}")
+                self.notify(f"Unknown command or destination: {original_first_part}")
 
         event.input.value = ""
 
