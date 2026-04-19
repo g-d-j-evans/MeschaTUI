@@ -449,7 +449,7 @@ class MeshChatApp(App):
         if not parts:
             return
 
-        original_first_part = parts[0]
+        original_first_part = parts[0].rstrip(":")
         first_part = original_first_part.lower()
         message_text = " ".join(parts[1:])
 
